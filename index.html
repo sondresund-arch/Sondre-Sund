@@ -58,6 +58,7 @@
     <div id="score">Score: 0</div>
     <div id="high">High: 0</div>
     <div id="lives">Liv: 3</div>
+    <div id="timer">Tid: 0s</div>
     <button id="start">Start / restart</button>
     <button id="reset">Nullstill highscore</button>
     <div class="note">Trykk på ballonger for å sprekke dem</div>
@@ -69,15 +70,31 @@
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha: false });
+
   let W = 700, H = 490;
 
   const scoreEl = document.getElementById('score');
   const highEl = document.getElementById('high');
   const livesEl = document.getElementById('lives');
+  const timerEl = document.getElementById('timer');
   const resetBtn = document.getElementById('reset');
   const startBtn = document.getElementById('start');
 
   const popSound = new Audio('https://actions.google.com/sounds/v1/cartoon/pop.ogg');
+  const shootSound = new Audio('https://actions.google.com/sounds/v1/impacts/metal_thud_and_ring.ogg');
+
+  let score = 0;
+  let high = parseInt(localStorage.getItem('ballong_high') || '0', 10);
+  let lives = 3;
+  let gameOver = false;
+  let gameStarted = false;
+
+  let timeElapsed = 0;
+  let fastMode = false;
+
+  highEl.textContent = 'High: ' + high;
+
+  const balloons = [];
 
   function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
@@ -93,18 +110,7 @@
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
 
-  let BASE_BALLOON_COUNT = 6;
   const COLORS = ['#e74c3c','#ff6b6b','#ffd166','#6bcb77','#4d96ff','#c77df3'];
-  let score = 0;
-  let high = parseInt(localStorage.getItem('ballong_high') || '0', 10);
-  let lives = 3;
-  let gameOver = false;
-  let gameStarted = false;
-
-  highEl.textContent = 'High: ' + high;
-  livesEl.textContent = 'Liv: ' + lives;
-
-  const balloons = [];
 
   function rand(min, max) { return Math.random() * (max - min) + min; }
 
@@ -112,8 +118,12 @@
     const r = rand(14, 28);
     const x = rand(r, W - r);
     const y = rand(r, H - r);
-    const speed = rand(0.3, 1.4) + score * 0.01;
+
+    let speed = rand(0.3, 1.4) + score * 0.01;
+    if (fastMode) speed *= 2;
+
     const angle = rand(0, Math.PI * 2);
+
     return {
       x, y, r,
       vx: Math.cos(angle) * speed,
@@ -126,17 +136,21 @@
 
   function initGame() {
     balloons.length = 0;
-    const count = BASE_BALLOON_COUNT + Math.floor(score / 10);
-    for (let i = 0; i < count; i++) balloons.push(spawnBalloon());
+    for (let i = 0; i < 6; i++) balloons.push(spawnBalloon());
   }
 
   function resetAll() {
     score = 0;
     lives = 3;
+    timeElapsed = 0;
+    fastMode = false;
     gameOver = false;
     gameStarted = true;
+
     updateScore();
     updateLives();
+    timerEl.textContent = "Tid: 0s";
+
     initGame();
   }
 
@@ -147,10 +161,15 @@
 
   function handlePointer(x, y) {
     if (!gameStarted || gameOver) return;
+
+    shootSound.currentTime = 0;
+    shootSound.play();
+
     let hit = false;
 
     for (let b of balloons) {
       if (b.boom) continue;
+
       const dx = x - b.x;
       const dy = y - b.y;
 
@@ -177,6 +196,18 @@
 
   function update(dt) {
     if (!gameStarted || gameOver) return;
+
+    timeElapsed += dt / 1000;
+    timerEl.textContent = "Tid: " + Math.floor(timeElapsed) + "s";
+
+    if (timeElapsed >= 60 && !fastMode) {
+      fastMode = true;
+      for (let b of balloons) {
+        b.vx *= 2;
+        b.vy *= 2;
+      }
+    }
+
     const now = performance.now();
 
     for (let b of balloons) {
