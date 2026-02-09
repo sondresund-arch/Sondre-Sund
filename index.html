@@ -2,7 +2,7 @@
 <html lang="no">
 <head>
     <meta charset="UTF-8">
-    <title>Gemedasj – Avansert Spill</title>
+    <title>Gemedasj – Ballongspill</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -13,7 +13,7 @@
 
         #gameArea {
             width: 600px;
-            height: 400px;
+            height: 500px;
             background: #333;
             margin: 20px auto;
             position: relative;
@@ -21,11 +21,11 @@
             overflow: hidden;
         }
 
-        #target {
+        .balloon {
             width: 50px;
-            height: 50px;
+            height: 70px;
             background: red;
-            border-radius: 50%;
+            border-radius: 50% 50% 45% 45%;
             position: absolute;
             cursor: pointer;
         }
@@ -40,86 +40,92 @@
 </head>
 <body>
 
-    <h1>Gemedasj – Klikk så fort du kan!</h1>
+    <h1>Gemedasj – Pop Ballongene!</h1>
     <p>Poeng: <span id="score">0</span></p>
     <p>Liv: <span id="lives">3</span></p>
 
-    <div id="gameArea">
-        <div id="target"></div>
-    </div>
+    <div id="gameArea"></div>
 
     <button id="startBtn">Start spillet</button>
 
-    <audio id="clickSound">
-        <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" type="audio/ogg">
+    <audio id="popSound">
+        <source src="https://actions.google.com/sounds/v1/cartoon/pop.ogg" type="audio/ogg">
     </audio>
 
     <script>
-        const target = document.getElementById("target");
         const gameArea = document.getElementById("gameArea");
         const scoreDisplay = document.getElementById("score");
         const livesDisplay = document.getElementById("lives");
         const startBtn = document.getElementById("startBtn");
-        const clickSound = document.getElementById("clickSound");
+        const popSound = document.getElementById("popSound");
 
         let score = 0;
         let lives = 3;
-        let speed = 1200;
         let gameRunning = false;
-        let clicked = false;
 
-        function moveTarget() {
+        function spawnBalloon() {
             if (!gameRunning) return;
 
-            clicked = false;
+            const balloon = document.createElement("div");
+            balloon.classList.add("balloon");
 
-            const maxX = gameArea.clientWidth - target.clientWidth;
-            const maxY = gameArea.clientHeight - target.clientHeight;
+            const x = Math.random() * (gameArea.clientWidth - 50);
+            balloon.style.left = x + "px";
+            balloon.style.bottom = "0px";
 
-            const x = Math.random() * maxX;
-            const y = Math.random() * maxY;
+            gameArea.appendChild(balloon);
 
-            target.style.left = x + "px";
-            target.style.top = y + "px";
+            balloon.addEventListener("click", () => {
+                popSound.play();
+                score++;
+                scoreDisplay.textContent = score;
+                balloon.remove();
+            });
 
-            setTimeout(() => {
-                if (!clicked && gameRunning) {
-                    lives--;
-                    livesDisplay.textContent = lives;
-
-                    if (lives <= 0) {
-                        gameOver();
-                        return;
-                    }
-                }
-
-                moveTarget();
-            }, speed);
+            moveBalloon(balloon);
+            setTimeout(spawnBalloon, 1000);
         }
 
-        target.addEventListener("click", () => {
-            if (!gameRunning) return;
+        function moveBalloon(balloon) {
+            let y = 0;
+            const speed = 2 + Math.random() * 3;
 
-            clicked = true;
-            clickSound.play();
-            score++;
-            scoreDisplay.textContent = score;
+            const interval = setInterval(() => {
+                if (!gameRunning) {
+                    clearInterval(interval);
+                    return;
+                }
 
-            if (speed > 300) {
-                speed -= 40;
+                y += speed;
+                balloon.style.bottom = y + "px";
+
+                if (y > gameArea.clientHeight) {
+                    balloon.remove();
+                    clearInterval(interval);
+                    loseLife();
+                }
+            }, 20);
+        }
+
+        function loseLife() {
+            lives--;
+            livesDisplay.textContent = lives;
+
+            if (lives <= 0) {
+                gameOver();
             }
-        });
+        }
 
         function startGame() {
             score = 0;
             lives = 3;
-            speed = 1200;
             gameRunning = true;
 
             scoreDisplay.textContent = score;
             livesDisplay.textContent = lives;
 
-            moveTarget();
+            gameArea.innerHTML = "";
+            spawnBalloon();
         }
 
         function gameOver() {
@@ -132,4 +138,3 @@
 
 </body>
 </html>
-
