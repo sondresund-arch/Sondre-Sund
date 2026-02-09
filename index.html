@@ -50,9 +50,6 @@
     cursor:pointer;
   }
   .note { color:#ccc; font-size:13px; }
-  @media (max-width:520px) {
-    body { padding:10px; }
-  }
 </style>
 </head>
 <body>
@@ -63,9 +60,9 @@
     <div id="lives">Liv: 3</div>
     <button id="start">Start / restart</button>
     <button id="reset">Nullstill highscore</button>
-    <div class="note">Trykk eller klikk på ballonger for å sprekke dem</div>
+    <div class="note">Trykk på ballonger for å sprekke dem</div>
   </div>
-  <canvas id="game" width="700" height="490" aria-label="Ballongspill"></canvas>
+  <canvas id="game" width="700" height="490"></canvas>
 </div>
 
 <script>
@@ -115,15 +112,15 @@
     const r = rand(14, 28);
     const x = rand(r, W - r);
     const y = rand(r, H - r);
-    const speed = rand(0.3, 1.4) + score * 0.01; // øker litt med score
+    const speed = rand(0.3, 1.4) + score * 0.01;
     const angle = rand(0, Math.PI * 2);
     return {
       x, y, r,
       vx: Math.cos(angle) * speed,
       vy: Math.sin(angle) * speed,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
-      popping: false,
-      popStart: 0
+      boom: false,
+      boomStart: 0
     };
   }
 
@@ -151,14 +148,17 @@
   function handlePointer(x, y) {
     if (!gameStarted || gameOver) return;
     let hit = false;
+
     for (let b of balloons) {
-      if (b.popping) continue;
+      if (b.boom) continue;
       const dx = x - b.x;
       const dy = y - b.y;
+
       if (Math.hypot(dx, dy) <= b.r) {
-        b.popping = true;
-        b.popStart = performance.now();
-        score += 1;
+        b.boom = true;
+        b.boomStart = performance.now();
+
+        score++;
         popSound.currentTime = 0;
         popSound.play();
         updateScore();
@@ -166,9 +166,8 @@
         break;
       }
     }
-    if (!hit) {
-      loseLife();
-    }
+
+    if (!hit) loseLife();
   }
 
   canvas.addEventListener('pointerdown', e => {
@@ -179,16 +178,18 @@
   function update(dt) {
     if (!gameStarted || gameOver) return;
     const now = performance.now();
+
     for (let b of balloons) {
-      if (b.popping) {
-        const elapsed = now - b.popStart;
-        if (elapsed > 250) {
+      if (b.boom) {
+        if (now - b.boomStart > 250) {
           Object.assign(b, spawnBalloon());
         }
         continue;
       }
+
       b.x += b.vx * dt * 0.06;
       b.y += b.vy * dt * 0.06;
+
       if (b.x < b.r) { b.x = b.r; b.vx *= -1; }
       if (b.x > W - b.r) { b.x = W - b.r; b.vx *= -1; }
       if (b.y < b.r) { b.y = b.r; b.vy *= -1; }
@@ -201,16 +202,27 @@
     ctx.fillRect(0,0,W,H);
 
     for (let b of balloons) {
-      ctx.save();
-      if (b.popping) {
-        const t = (performance.now() - b.popStart) / 250;
-        const scale = 1 - Math.min(t,1) * 1.2;
-        const alpha = 1 - Math.min(t,1);
-        ctx.globalAlpha = alpha;
-        ctx.translate(b.x, b.y);
-        ctx.scale(scale, scale);
-        ctx.translate(-b.x, -b.y);
+      if (b.boom) {
+        const t = (performance.now() - b.boomStart) / 250;
+        const size = b.r * (1 + t * 2);
+
+        ctx.save();
+        ctx.globalAlpha = 1 - t;
+
+        ctx.fillStyle = "orange";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, size, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "yellow";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, size * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+        continue;
       }
+
       ctx.beginPath();
       ctx.strokeStyle = 'rgba(255,255,255,0.08)';
       ctx.lineWidth = 1;
@@ -231,8 +243,6 @@
       ctx.fillStyle = shadeColor(b.color, -30);
       ctx.ellipse(b.x, b.y + b.r - 3, 6, 3, 0, 0, Math.PI*2);
       ctx.fill();
-
-      ctx.restore();
     }
 
     ctx.fillStyle = 'white';
@@ -240,23 +250,6 @@
     ctx.fillText('Score: ' + score, 10, 22);
     ctx.fillText('High: ' + high, 110, 22);
     ctx.fillText('Liv: ' + lives, 210, 22);
-
-    if (!gameStarted) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = 'white';
-      ctx.font = '24px Arial';
-      ctx.fillText('Trykk "Start / restart" for å spille', 60, H/2);
-    } else if (gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = 'white';
-      ctx.font = '28px Arial';
-      ctx.fillText('GAME OVER', W/2 - 80, H/2 - 10);
-      ctx.font = '18px Arial';
-      ctx.fillText('Score: ' + score + '  |  High: ' + high, W/2 - 110, H/2 + 20);
-      ctx.fillText('Trykk "Start / restart" for å prøve igjen', W/2 - 160, H/2 + 50);
-    }
   }
 
   function shadeColor(color, percent) {
@@ -287,9 +280,7 @@
     if (!gameStarted || gameOver) return;
     lives--;
     updateLives();
-    if (lives <= 0) {
-      gameOver = true;
-    }
+    if (lives <= 0) gameOver = true;
   }
 
   resetBtn.addEventListener('click', () => {
