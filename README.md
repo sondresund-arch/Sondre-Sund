@@ -1,128 +1,276 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="no">
 <head>
-    <meta charset="UTF-8">
-    <title>Gemedasj – Avansert Spill</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            background: #222;
-            color: white;
-        }
-
-        #gameArea {
-            width: 600px;
-            height: 400px;
-            background: #333;
-            margin: 20px auto;
-            position: relative;
-            border: 3px solid white;
-            overflow: hidden;
-        }
-
-        #target {
-            width: 50px;
-            height: 50px;
-            background: red;
-            border-radius: 50%;
-            position: absolute;
-            cursor: pointer;
-        }
-
-        #startBtn {
-            padding: 10px 20px;
-            font-size: 18px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ballong-skyting</title>
+<style>
+  :root { --bg: #111; --canvas-bg: #222; --panel: rgba(255,255,255,0.04); }
+  html,body { height:100%; margin:0; }
+  body {
+    background:var(--bg);
+    color:#fff;
+    font-family: Arial, Helvetica, sans-serif;
+    display:flex;
+    align-items:start;
+    justify-content:center;
+    padding:20px;
+  }
+  .wrap {
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    align-items:center;
+  }
+  canvas {
+    background:var(--canvas-bg);
+    border:2px solid #555;
+    cursor: crosshair;
+    touch-action:none; /* for better touch handling */
+    width: 100%;
+    max-width: 700px;
+    height: auto;
+  }
+  .panel {
+    background: var(--panel);
+    padding:8px 12px;
+    border-radius:6px;
+    font-size:14px;
+    display:flex;
+    gap:12px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  button {
+    background:#3a7;
+    color:#042;
+    border:none;
+    padding:6px 10px;
+    border-radius:4px;
+    cursor:pointer;
+  }
+  .note { color:#ccc; font-size:13px; }
+  @media (max-width:520px) {
+    body { padding:10px; }
+  }
+</style>
 </head>
 <body>
-
-    <h1>Gemedasj – Klikk så fort du kan!</h1>
-    <p>Poeng: <span id="score">0</span></p>
-    <p>Liv: <span id="lives">3</span></p>
-
-    <div id="gameArea">
-        <div id="target"></div>
-    </div>
-
-    <button id="startBtn">Start spillet</button>
-
-    <audio id="clickSound">
-        <source src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" type="audio/ogg">
-    </audio>
-
-    <script>
-        const target = document.getElementById("target");
-        const gameArea = document.getElementById("gameArea");
-        const scoreDisplay = document.getElementById("score");
-        const livesDisplay = document.getElementById("lives");
-        const startBtn = document.getElementById("startBtn");
-        const clickSound = document.getElementById("clickSound");
-
-        let score = 0;
-        let lives = 3;
-        let speed = 1200;
-        let gameRunning = false;
-
-        function moveTarget() {
-            if (!gameRunning) return;
-
-            const maxX = gameArea.clientWidth - target.clientWidth;
-            const maxY = gameArea.clientHeight - target.clientHeight;
-
-            const x = Math.random() * maxX;
-            const y = Math.random() * maxY;
-
-            target.style.left = x + "px";
-            target.style.top = y + "px";
-
-            lives--;
-            livesDisplay.textContent = lives;
-
-            if (lives <= 0) {
-                gameOver();
-                return;
-            }
-
-            setTimeout(moveTarget, speed);
-        }
-
-        target.addEventListener("click", () => {
-            if (!gameRunning) return;
-
-            clickSound.play();
-            score++;
-            scoreDisplay.textContent = score;
-
-            if (speed > 300) {
-                speed -= 40;
-            }
-
-            moveTarget();
-        });
-
-        function startGame() {
-            score = 0;
-            lives = 3;
-            speed = 1200;
-            gameRunning = true;
-
-            scoreDisplay.textContent = score;
-            livesDisplay.textContent = lives;
-
-            moveTarget();
-        }
-
-        function gameOver() {
-            gameRunning = false;
-            alert("Game Over! Du fikk " + score + " poeng.");
-        }
-
-        startBtn.addEventListener("click", startGame);
-    </script>
-
+<div class="wrap">
+<div class="panel">
+<div id="score">Score: 0</div>
+<div id="high">High: 0</div>
+<button id="reset">Nullstill highscore</button>
+<div class="note">Trykk eller klikk på ballonger for å sprekke dem</div>
+</div>
+<canvas id="game" width="700" height="490" aria-label="Ballongspill"></canvas>
+</div>
+ 
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let W = 700, H = 490;
+  const scoreEl = document.getElementById('score');
+  const highEl = document.getElementById('high');
+  const resetBtn = document.getElementById('reset');
+ 
+  // device pixel ratio handling for sharp canvas
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.max(window.devicePixelRatio || 1, 1);
+    W = Math.max(320, Math.floor(rect.width));
+    H = Math.floor((W * 490) / 700); // keep aspect ratio
+    canvas.style.width = rect.width + 'px';
+    canvas.style.height = H + 'px';
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale drawing to CSS pixels
+  }
+  window.addEventListener('resize', resizeCanvas);
+  // initialize size
+  resizeCanvas();
+ 
+  // settings
+  const BALLOON_COUNT = 6;
+  const COLORS = ['#e74c3c','#ff6b6b','#ffd166','#6bcb77','#4d96ff','#c77df3'];
+  let score = 0;
+  let high = parseInt(localStorage.getItem('ballong_high') || '0', 10);
+ 
+  highEl.textContent = 'High: ' + high;
+ 
+  // balloon structure
+  const balloons = [];
+ 
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+ 
+  function spawnBalloon() {
+    const r = rand(14, 28);
+    const x = rand(r, W - r);
+    const y = rand(r, H - r);
+    const speed = rand(0.3, 1.4);
+    const angle = rand(0, Math.PI * 2);
+    return {
+      x, y, r,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      popping: false,
+      popStart: 0
+    };
+  }
+ 
+  function init() {
+    balloons.length = 0;
+    for (let i = 0; i < BALLOON_COUNT; i++) balloons.push(spawnBalloon());
+    score = 0;
+    updateScore();
+  }
+  init();
+ 
+  // Input handling (use pointer events for mouse/touch/pen)
+  function clientToCanvas(cx, cy) {
+    const rect = canvas.getBoundingClientRect();
+    // Return CSS-pixel coordinates relative to canvas top-left
+    return { x: cx - rect.left, y: cy - rect.top };
+  }
+ 
+  function handlePointer(x, y) {
+    for (let b of balloons) {
+      if (b.popping) continue;
+      const dx = x - b.x;
+      const dy = y - b.y;
+      if (Math.hypot(dx, dy) <= b.r) {
+        // pop!
+        b.popping = true;
+        b.popStart = performance.now();
+        score += 1;
+        updateScore();
+        return;
+      }
+    }
+  }
+ 
+  // pointerdown covers mouse and touch; touch-action:none in CSS prevents default scrolling
+  canvas.addEventListener('pointerdown', e => {
+    const p = clientToCanvas(e.clientX, e.clientY);
+    handlePointer(p.x, p.y);
+  });
+ 
+  // update/draw loop
+  function update(dt) {
+    const now = performance.now();
+    for (let b of balloons) {
+      if (b.popping) {
+        const elapsed = now - b.popStart;
+        if (elapsed > 250) {
+          // respawn after animation
+          Object.assign(b, spawnBalloon());
+        }
+        continue;
+      }
+      b.x += b.vx * dt * 0.06;
+      b.y += b.vy * dt * 0.06;
+      // bounce
+      if (b.x < b.r) { b.x = b.r; b.vx *= -1; }
+      if (b.x > W - b.r) { b.x = W - b.r; b.vx *= -1; }
+      if (b.y < b.r) { b.y = b.r; b.vy *= -1; }
+      if (b.y > H - b.r) { b.y = H - b.r; b.vy *= -1; }
+    }
+  }
+ 
+  function draw() {
+    // clear
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0,0,W,H);
+ 
+    // balloons
+    for (let b of balloons) {
+      ctx.save();
+      if (b.popping) {
+        const t = (performance.now() - b.popStart) / 250;
+        const scale = 1 - Math.min(t,1) * 1.2;
+        const alpha = 1 - Math.min(t,1);
+        ctx.globalAlpha = alpha;
+        ctx.translate(b.x, b.y);
+        ctx.scale(scale, scale);
+        ctx.translate(-b.x, -b.y);
+      }
+      // string
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 1;
+      ctx.moveTo(b.x, b.y + b.r);
+      ctx.quadraticCurveTo(b.x + 6, b.y + b.r + 18, b.x, b.y + b.r + 36);
+      ctx.stroke();
+ 
+      // balloon
+      ctx.beginPath();
+      const g = ctx.createRadialGradient(b.x - b.r*0.3, b.y - b.r*0.6, b.r*0.1, b.x, b.y, b.r);
+      g.addColorStop(0, '#fff6');
+      g.addColorStop(0.2, b.color);
+      g.addColorStop(1, shadeColor(b.color, -20));
+      ctx.fillStyle = g;
+      ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
+      ctx.fill();
+ 
+      // knot
+      ctx.beginPath();
+      ctx.fillStyle = shadeColor(b.color, -30);
+      ctx.ellipse(b.x, b.y + b.r - 3, 6, 3, 0, 0, Math.PI*2);
+      ctx.fill();
+ 
+      ctx.restore();
+    }
+ 
+    // HUD (drawn on canvas for consistent positions)
+    ctx.fillStyle = 'white';
+    ctx.font = '16px Arial';
+    ctx.fillText('Score: ' + score, 10, 22);
+    ctx.fillText('High: ' + high, 110, 22);
+  }
+ 
+  // small helper to darken color
+  function shadeColor(color, percent) {
+    // color like #rrggbb
+    const num = parseInt(color.replace('#',''),16);
+    let r = (num >> 16) + percent;
+    let g = ((num >> 8) & 0x00FF) + percent;
+    let b = (num & 0x0000FF) + percent;
+    r = Math.max(Math.min(255, r), 0);
+    g = Math.max(Math.min(255, g), 0);
+    b = Math.max(Math.min(255, b), 0);
+    return '#' + ( (1<<24) + (r<<16) + (g<<8) + b ).toString(16).slice(1);
+  }
+ 
+  // score update + highscore persist
+  function updateScore() {
+    scoreEl.textContent = 'Score: ' + score;
+    if (score > high) {
+      high = score;
+      localStorage.setItem('ballong_high', String(high));
+      highEl.textContent = 'High: ' + high;
+    }
+  }
+ 
+  resetBtn.addEventListener('click', () => {
+    localStorage.removeItem('ballong_high');
+    high = 0;
+    highEl.textContent = 'High: ' + high;
+  });
+ 
+  // main loop
+  let last = performance.now();
+  function loop(ts) {
+    const dt = ts - last;
+    last = ts;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+ 
+})();
+</script>
 </body>
 </html>
