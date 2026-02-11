@@ -1,27 +1,33 @@
-<<!doctype html>
+<!doctype html>
 <html lang="no">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Ballong-skyting: Pro</title>
 <style>
-  :root { --bg: #111; --canvas-bg: #222; --panel: rgba(255,255,255,0.04); }
+  :root { --bg: #111; --canvas-bg: #222; --panel: rgba(255,255,255,0.04); --accent: #e74c3c; }
   html,body { height:100%; margin:0; overflow: hidden; }
   body {
     background:var(--bg);
     color:#fff;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     display:flex;
-    align-items:start;
+    align-items:center;
     justify-content:center;
-    padding:20px;
+    padding:10px;
   }
-  .wrap {
+  .main-container {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    max-width: 1000px;
+    width: 100%;
+  }
+  .game-area {
     display:flex;
     flex-direction:column;
     gap:10px;
-    align-items:center;
-    width: 100%;
+    flex-grow: 1;
   }
   canvas {
     background:var(--canvas-bg);
@@ -29,112 +35,142 @@
     cursor: crosshair;
     touch-action:none;
     width: 100%;
-    max-width: 700px;
     height: auto;
     box-shadow: 0 10px 30px rgba(0,0,0,0.5);
   }
-  .panel {
+  .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-width: 150px;
+  }
+  .stat-box {
     background: var(--panel);
-    padding:10px 20px;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #444;
+    text-align: center;
+  }
+  .timer-val {
+    font-size: 32px;
+    font-weight: bold;
+    color: var(--accent);
+    display: block;
+  }
+  .score-val { font-size: 24px; color: #3a7; font-weight: bold; }
+  
+  .top-bar {
+    background: var(--panel);
+    padding:10px;
     border-radius:8px;
-    font-size:16px;
     display:flex;
-    gap:20px;
-    align-items:center;
-    flex-wrap:wrap;
+    justify-content: space-around;
     border: 1px solid #444;
   }
   button {
-    background:#3a7;
+    background:#444;
     color:#fff;
     border:none;
-    padding:8px 15px;
+    padding:8px;
     border-radius:4px;
     cursor:pointer;
-    font-weight: bold;
+    font-size: 11px;
   }
-  button:hover { background: #4b8; }
-  .note { color:#aaa; font-size:13px; }
+  button:hover { background: #555; }
+ 
+  @media (max-width: 800px) {
+    .main-container { flex-direction: column; align-items: center; }
+    .side-panel { flex-direction: row; width: 100%; }
+    .stat-box { flex: 1; padding: 5px; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-<div class="panel">
-<div id="score">Score: 0</div>
-<div id="lives">Liv: 3</div>
-<div id="high">High: 0</div>
-<button id="reset">Nullstill Highscore</button>
-</div>
-<canvas id="game" width="700" height="490" aria-label="Ballongspill"></canvas>
-<div class="note">Skyt en ballong hvert 10. sekund for å holde livene! Farten øker hvert 30. sek.</div>
+ 
+<div class="main-container">
+  <div class="game-area">
+    <div class="top-bar">
+      <div id="lives">Liv: 3</div>
+      <div id="high">High: 0</div>
+      <button id="reset">Nullstill Highscore</button>
+    </div>
+    <canvas id="game" width="700" height="490"></canvas>
+  </div>
+ 
+  <div class="side-panel">
+    <div class="stat-box">
+      <span>SKUDDKLOKKE</span>
+      <span id="timer" class="timer-val">10.0</span>
+    </div>
+    <div class="stat-box">
+      <span>SCORE</span>
+      <div id="score" class="score-val">0</div>
+    </div>
+    <div style="font-size: 12px; color: #888; text-align: center;">
+      Små ballonger = 3p<br>Store ballonger = 1p
+    </div>
+  </div>
 </div>
  
 <script>
 (() => {
   const canvas = document.getElementById('game');
   const ctx = canvas.getContext('2d', { alpha: false });
-  let W = 700, H = 490;
   const scoreEl = document.getElementById('score');
   const highEl = document.getElementById('high');
   const livesEl = document.getElementById('lives');
+  const timerEl = document.getElementById('timer');
   const resetBtn = document.getElementById('reset');
  
-  // Lyd-motor (Web Audio API)
+  let W = 700, H = 490;
+  
+  // Lyd-motor
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   function playPopSound() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+    osc.frequency.setValueAtTime(160, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
     osc.connect(gain);
     gain.connect(audioCtx.destination);
     osc.start();
-    osc.stop(audioCtx.currentTime + 0.2);
+    osc.stop(audioCtx.currentTime + 0.15);
   }
  
   function resizeCanvas() {
     const rect = canvas.getBoundingClientRect();
-    const dpr = Math.max(window.devicePixelRatio || 1, 1);
-    W = Math.max(320, Math.floor(rect.width));
-    H = Math.floor((W * 490) / 700);
-    canvas.style.width = rect.width + 'px';
-    canvas.style.height = H + 'px';
-    canvas.width = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
+    const dpr = window.devicePixelRatio || 1;
+    W = 700; H = 490; // Logisk størrelse
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
   window.addEventListener('resize', resizeCanvas);
   resizeCanvas();
  
-  const BALLOON_COUNT = 7;
+  const BALLOON_COUNT = 6;
   const COLORS = ['#e74c3c','#ff6b6b','#ffd166','#6bcb77','#4d96ff','#c77df3'];
-  let score = 0;
-  let lives = 3;
-  let high = parseInt(localStorage.getItem('ballong_high') || '0', 10);
+  let score = 0, lives = 3, gameOver = false;
+  let high = parseInt(localStorage.getItem('ballong_high_v2') || '0', 10);
   let gameStartTime = performance.now();
   let lastPopTimestamp = performance.now();
-  let gameOver = false;
   let speedMultiplier = 1.0;
  
   highEl.textContent = 'High: ' + high;
  
   const balloons = [];
-  function rand(min, max) { return Math.random() * (max - min) + min; }
- 
   function spawnBalloon() {
-    const r = rand(12, 28); // Variert størrelse
-    const x = rand(r, W - r);
-    const y = rand(r, H - r);
-    const baseSpeed = rand(0.5, 1.5);
-    const angle = rand(0, Math.PI * 2);
+    const r = Math.random() * (28 - 12) + 12; // Radius mellom 12 og 28
     return {
-      x, y, r,
-      vx: Math.cos(angle) * baseSpeed,
-      vy: Math.sin(angle) * baseSpeed,
+      x: Math.random() * (W - 60) + 30,
+      y: Math.random() * (H - 60) + 30,
+      r: r,
+      vx: (Math.random() - 0.5) * 2.5,
+      vy: (Math.random() - 0.5) * 2.5,
       color: COLORS[Math.floor(Math.random() * COLORS.length)],
       popping: false,
       popStart: 0
@@ -144,50 +180,43 @@
   function init() {
     balloons.length = 0;
     for (let i = 0; i < BALLOON_COUNT; i++) balloons.push(spawnBalloon());
-    score = 0;
-    lives = 3;
-    speedMultiplier = 1.0;
-    gameOver = false;
+    score = 0; lives = 3; speedMultiplier = 1.0; gameOver = false;
     gameStartTime = performance.now();
     lastPopTimestamp = performance.now();
     updateHUD();
   }
   init();
  
-  function handlePointer(x, y) {
+  canvas.addEventListener('pointerdown', e => {
     if (gameOver) { init(); return; }
-    
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+ 
     for (let b of balloons) {
-      if (b.popping) continue;
-      const dx = x - b.x;
-      const dy = y - b.y;
-      if (Math.hypot(dx, dy) <= b.r) {
+      if (!b.popping && Math.hypot(mx - b.x, my - b.y) <= b.r) {
         b.popping = true;
         b.popStart = performance.now();
         
-        // Poengberegning: mindre = mer poeng (fra 1 til 5 poeng)
-        const points = Math.max(1, Math.round(35 / b.r));
-        score += points;
+        // POENGLOGIKK: De minste (r < 16) gir 3 poeng, resten 1.
+        score += (b.r < 16) ? 3 : 1;
         
-        lastPopTimestamp = performance.now(); // Nullstill skuddklokke
+        lastPopTimestamp = performance.now(); // RESET KLOKKE
         playPopSound();
         updateHUD();
-        return;
+        break;
       }
     }
-  }
- 
-  canvas.addEventListener('pointerdown', e => {
-    const rect = canvas.getBoundingClientRect();
-    handlePointer(e.clientX - rect.left, e.clientY - rect.top);
   });
  
   function updateHUD() {
-    scoreEl.textContent = 'Score: ' + score;
+    scoreEl.textContent = score;
     livesEl.textContent = 'Liv: ' + lives;
     if (score > high) {
       high = score;
-      localStorage.setItem('ballong_high', String(high));
+      localStorage.setItem('ballong_high_v2', String(high));
       highEl.textContent = 'High: ' + high;
     }
     if (lives <= 0) gameOver = true;
@@ -195,18 +224,18 @@
  
   function update(dt) {
     if (gameOver) return;
- 
     const now = performance.now();
     
     // Øk tempo hvert 30. sekund
-    const secondsElapsed = (now - gameStartTime) / 1000;
-    speedMultiplier = 1.0 + Math.floor(secondsElapsed / 30) * 0.25;
+    speedMultiplier = 1.0 + Math.floor((now - gameStartTime) / 30000) * 0.3;
  
-    // Sjekk skuddklokke (10 sekunder)
-    const timeSinceLastPop = (now - lastPopTimestamp) / 1000;
-    if (timeSinceLastPop >= 10) {
+    // Skuddklokke logikk
+    let timeRemaining = Math.max(0, 10 - (now - lastPopTimestamp) / 1000);
+    timerEl.textContent = timeRemaining.toFixed(1);
+    
+    if (timeRemaining <= 0) {
       lives--;
-      lastPopTimestamp = now; // Gi 10 nye sekunder
+      lastPopTimestamp = now;
       updateHUD();
     }
  
@@ -215,12 +244,10 @@
         if (now - b.popStart > 250) Object.assign(b, spawnBalloon());
         continue;
       }
-      // Bruk speedMultiplier her
       b.x += b.vx * dt * 0.06 * speedMultiplier;
       b.y += b.vy * dt * 0.06 * speedMultiplier;
- 
-      if (b.x < b.r || b.x > W - b.r) { b.vx *= -1; b.x = Math.max(b.r, Math.min(W-b.r, b.x)); }
-      if (b.y < b.r || b.y > H - b.r) { b.vy *= -1; b.y = Math.max(b.r, Math.min(H-b.r, b.y)); }
+      if (b.x < b.r || b.x > W - b.r) b.vx *= -1;
+      if (b.y < b.r || b.y > H - b.r) b.vy *= -1;
     }
   }
  
@@ -228,66 +255,44 @@
     ctx.fillStyle = '#222';
     ctx.fillRect(0,0,W,H);
  
-    // Tegn skuddklokke-bar i bunnen
-    const now = performance.now();
-    const timeRatio = Math.max(0, 1 - (now - lastPopTimestamp) / 10000);
-    ctx.fillStyle = timeRatio > 0.3 ? '#3a7' : '#e74c3c';
-    ctx.fillRect(0, H - 5, W * timeRatio, 5);
- 
     for (let b of balloons) {
       ctx.save();
       if (b.popping) {
-        const t = (now - b.popStart) / 250;
+        const t = (performance.now() - b.popStart) / 250;
         ctx.globalAlpha = 1 - t;
         ctx.translate(b.x, b.y);
         ctx.scale(1 + t, 1 + t);
         ctx.translate(-b.x, -b.y);
       }
       
-      // Snor
-      ctx.beginPath();
-      ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-      ctx.moveTo(b.x, b.y + b.r);
-      ctx.lineTo(b.x, b.y + b.r + 20);
-      ctx.stroke();
- 
-      // Ballong
+      // Ballong-kropp
       ctx.beginPath();
       const g = ctx.createRadialGradient(b.x - b.r*0.3, b.y - b.r*0.3, b.r*0.1, b.x, b.y, b.r);
-      g.addColorStop(0, '#fff8');
-      g.addColorStop(0.3, b.color);
-      g.addColorStop(1, '#000a');
+      g.addColorStop(0, '#fff6');
+      g.addColorStop(0.4, b.color);
+      g.addColorStop(1, '#0004');
       ctx.fillStyle = g;
       ctx.arc(b.x, b.y, b.r, 0, Math.PI*2);
       ctx.fill();
       ctx.restore();
     }
  
-    // HUD på Canvas
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 14px Arial';
-    ctx.fillText('TEMPO: x' + speedMultiplier.toFixed(1), 10, H - 20);
-    ctx.textAlign = 'right';
-    ctx.fillText('TID IGJEN: ' + Math.ceil(10 - (now - lastPopTimestamp)/1000) + 's', W - 10, H - 20);
-    ctx.textAlign = 'left';
- 
     if (gameOver) {
-      ctx.fillStyle = 'rgba(0,0,0,0.8)';
+      ctx.fillStyle = 'rgba(0,0,0,0.85)';
       ctx.fillRect(0,0,W,H);
       ctx.fillStyle = 'white';
-      ctx.font = 'bold 40px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText('GAME OVER', W/2, H/2);
+      ctx.font = 'bold 40px Arial';
+      ctx.fillText('GAME OVER', W/2, H/2 - 20);
       ctx.font = '20px Arial';
-      ctx.fillText('Score: ' + score, W/2, H/2 + 40);
-      ctx.fillText('Trykk for å prøve igjen', W/2, H/2 + 80);
+      ctx.fillText('Score: ' + score, W/2, H/2 + 20);
+      ctx.fillText('Trykk for å starte på nytt', W/2, H/2 + 60);
     }
   }
  
   resetBtn.addEventListener('click', () => {
-    localStorage.removeItem('ballong_high');
-    high = 0;
-    highEl.textContent = 'High: 0';
+    localStorage.removeItem('ballong_high_v2');
+    high = 0; highEl.textContent = 'High: 0';
   });
  
   let last = performance.now();
